@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Icon Mosaic Tool - Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        
+        body {
+            background-color: #050505;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            margin: 0;
+            user-select: none;
+        }
+
+        /* Background Grid */
+        .workspace {
+            position: fixed;
+            inset: 0;
+            background: 
+                radial-gradient(circle at center, #111 0%, #050505 100%),
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 0;
+        }
+
+        .header-title {
+            position: fixed;
+            top: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* Floating Window Styling */
+        .floating-window {
+            position: absolute;
+            background: rgba(20, 20, 20, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            z-index: 100;
+            min-width: 220px;
+        }
+
+        .window-header {
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px 12px 0 0;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .window-header:active {
+            cursor: grabbing;
+        }
+
+        .window-content {
+            padding: 16px;
+        }
+
+        .canvas-container {
+            position: relative;
+            z-index: 1;
+            max-width: 85vw;
+            max-height: 85vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            box-shadow: 0 0 80px rgba(0,0,0,0.5);
+            transition: opacity 0.3s ease;
+        }
+
+        /* UI Elements */
+        .preset-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 6px;
+        }
+
+        .preset-card:hover { background: rgba(255, 255, 255, 0.06); }
+        .preset-card.active {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        input[type=range] {
+            appearance: none;
+            background: transparent;
+            width: 100%;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 2px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 12px; width: 12px;
+            border-radius: 50%;
+            background: #fff;
+            margin-top: -5px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 30px; height: 16px;
+        }
+
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: .3s;
+            border-radius: 20px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 10px; width: 10px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider { background-color: rgba(255, 255, 255, 0.4); }
+        input:checked + .toggle-slider:before { transform: translateX(14px); }
+
+        /* Modified Button Class for Playback */
+        .btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 8px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        /* Ghost Style Buttons for Playback */
+        .btn-ghost {
+            background: transparent !important;
+            border: none !important;
+            padding: 6px;
+            opacity: 0.4;
+            transition: opacity 0.2s;
+        }
+        .btn-ghost:hover:not(:disabled) { opacity: 0.8; }
+        .btn-ghost:active:not(:disabled) { opacity: 1; }
+        .btn-ghost.active-state { opacity: 1; color: #fff; }
+
+        #placeholderText { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body>
+
+    <div class="header-title">
+        <h1 class="text-[11px] uppercase tracking-[0.8em] opacity-40 font-light">Gen Noise</h1>
+    </div>
+
+    <div class="workspace">
+        <div class="canvas-container" id="mainContainer">
+            <div id="placeholderText" class="text-[10px] uppercase tracking-[0.5em] opacity-30">Import source to decode</div>
+            <canvas id="canvas" class="hidden"></canvas>
+        </div>
+    </div>
+
+    <!-- Floating Window: Input -->
+    <div class="floating-window" style="top: 80px; left: 120px;">
+        <div class="window-header">
+            <span class="text-[9px] uppercase tracking-widest opacity-50 font-bold">Input</span>
+        </div>
+        <div class="window-content">
+            <label class="btn cursor-pointer w-full" id="uploadLabel">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span id="uploadText" class="uppercase tracking-widest text-[9px]">Upload Source</span>
+                <input type="file" id="imageLoader" accept="image/*" class="hidden">
+            </label>
+        </div>
+    </div>
+
+    <!-- Floating Window: Systems -->
+    <div class="floating-window" style="top: 270px; left: 30px; width: 220px;">
+        <div class="window-header">
+            <span class="text-[9px] uppercase tracking-widest opacity-50 font-bold">Visual Systems</span>
+        </div>
+        <div class="window-content space-y-1">
+            <div class="preset-card active" onclick="setSystem('geometry', this)">
+                <div class="text-[10px] font-semibold tracking-wide">GEOMETRY</div>
+            </div>
+            <div class="preset-card" onclick="setSystem('minimal', this)">
+                <div class="text-[10px] font-semibold tracking-wide">CIRCLES</div>
+            </div>
+            <div class="preset-card" onclick="setSystem('crosshatch', this)">
+                <div class="text-[10px] font-semibold tracking-wide">CROSSHATCH</div>
+            </div>
+            <div class="preset-card" onclick="setSystem('typewriter', this)">
+                <div class="text-[10px] font-semibold tracking-wide">GLYPHS</div>
+            </div>
+            <div class="preset-card" onclick="setSystem('digital', this)">
+                <div class="text-[10px] font-semibold tracking-wide">BINARY</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Window: Parameters -->
+    <div class="floating-window" style="top: 80px; right: 30px; width: 240px;">
+        <div class="window-header">
+            <span class="text-[9px] uppercase tracking-widest opacity-50 font-bold">Parameters</span>
+        </div>
+        <div class="window-content space-y-6">
+            <div class="flex items-center justify-between">
+                <span class="text-[9px] uppercase tracking-widest opacity-40 font-bold">Invert Mapping</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="invertToggle">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="space-y-3">
+                <div class="flex justify-between items-center">
+                    <span class="text-[9px] uppercase tracking-widest opacity-40 font-bold">Fidelity</span>
+                    <span id="fidelityValue" class="text-[10px] font-mono opacity-60">16px</span>
+                </div>
+                <input type="range" id="fidelitySlider" min="6" max="80" value="16">
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Window: Playback -->
+    <div class="floating-window" style="bottom: 40px; left: 50%; transform: translateX(-50%); min-width: 320px;">
+        <div class="window-content px-4 pt-2 pb-3 space-y-1">
+            <!-- Top Controls Row -->
+            <div class="relative flex items-center h-10">
+                <!-- Center: Navigation -->
+                <div class="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
+                    <button id="backBtn" class="btn btn-ghost" title="Sharpen Image (Decrease Pixel Size)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2"></line></svg>
+                    </button>
+                    
+                    <button id="playBtn" class="btn btn-ghost" title="Play/Pause">
+                        <svg id="playIcon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        <svg id="pauseIcon" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                    </button>
+                    
+                    <button id="forwardBtn" class="btn btn-ghost" title="Blur Image (Increase Pixel Size)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2"></line></svg>
+                    </button>
+                </div>
+
+                <!-- Right: Mode Toggles -->
+                <div class="ml-auto flex items-center gap-1">
+                    <button id="loopBtn" class="btn btn-ghost" title="Loop Mode">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.1l4 4-4 4"/><path d="M3 12.2v-2a4 4 0 0 1 4-4h14"/><path d="M7 21.9l-4-4 4-4"/><path d="M21 11.8v2a4 4 0 0 1-4 4H3"/></svg>
+                    </button>
+
+                    <button id="boomerangBtn" class="btn btn-ghost" title="Boomerang Mode">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m20 12-8-8-8 8"/><path d="m20 20-8-8-8 8"/></svg>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Bottom Slider Row -->
+            <div class="w-full">
+                <input type="range" id="playBar" min="6" max="80" value="80" class="w-full cursor-pointer">
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Window: Export -->
+    <div class="floating-window" style="bottom: 40px; right: 30px;">
+        <div class="window-header">
+            <span class="text-[9px] uppercase tracking-widest opacity-50 font-bold">Output</span>
+        </div>
+        <div class="window-content">
+            <button id="downloadBtn" disabled class="btn w-full text-white">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span class="uppercase tracking-widest text-[9px]">Export PNG</span>
+            </button>
+        </div>
+    </div>
+
+    <canvas id="sourceCanvas" style="display:none;"></canvas>
+
+    <script>
+        const imageLoader = document.getElementById('imageLoader');
+        const canvas = document.getElementById('canvas');
+        const sourceCanvas = document.getElementById('sourceCanvas');
+        const slider = document.getElementById('fidelitySlider');
+        const playBar = document.getElementById('playBar');
+        const invertToggle = document.getElementById('invertToggle');
+        const fidelityValue = document.getElementById('fidelityValue');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const placeholder = document.getElementById('placeholderText');
+        const uploadText = document.getElementById('uploadText');
+        const mainContainer = document.getElementById('mainContainer');
+        
+        // Playback Elements
+        const playBtn = document.getElementById('playBtn');
+        const forwardBtn = document.getElementById('forwardBtn');
+        const backBtn = document.getElementById('backBtn');
+        const playIcon = document.getElementById('playIcon');
+        const pauseIcon = document.getElementById('pauseIcon');
+        const loopBtn = document.getElementById('loopBtn');
+        const boomerangBtn = document.getElementById('boomerangBtn');
+        
+        const ctx = canvas.getContext('2d');
+        const sCtx = sourceCanvas.getContext('2d');
+        
+        let originalImage = null;
+        let currentSystem = 'geometry';
+        
+        // Playback State
+        let isPlaying = false;
+        let playDirection = 1; // 1 for blurring (increasing size), -1 for sharpening (decreasing size)
+        let isLooping = false;
+        let isBoomerang = false;
+        let animationFrame = null;
+        let lastFrameTime = 0;
+        const frameInterval = 40; 
+
+        // Draggable Functionality
+        document.querySelectorAll('.window-header').forEach(header => {
+            header.addEventListener('mousedown', (e) => {
+                const win = header.parentElement;
+                let offsetX = e.clientX - win.getBoundingClientRect().left;
+                let offsetY = e.clientY - win.getBoundingClientRect().top;
+
+                const move = (e) => {
+                    win.style.left = `${e.clientX - offsetX}px`;
+                    win.style.top = `${e.clientY - offsetY}px`;
+                    win.style.bottom = 'auto';
+                    win.style.right = 'auto';
+                };
+
+                const stop = () => {
+                    document.removeEventListener('mousemove', move);
+                    document.removeEventListener('mouseup', stop);
+                };
+
+                document.addEventListener('mousemove', move);
+                document.addEventListener('mouseup', stop);
+            });
+        });
+
+        const systems = {
+            geometry: {
+                dark: (ctx, x, y, s, c) => { ctx.fillStyle = c; ctx.fillRect(x + s*0.15, y + s*0.15, s*0.7, s*0.7); },
+                mid: (ctx, x, y, s, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x + s/2, y + s/2, s*0.35, 0, Math.PI*2); ctx.fill(); },
+                light: (ctx, x, y, s, c) => { 
+                    ctx.strokeStyle = c; ctx.lineWidth = Math.max(1, s*0.12); ctx.beginPath(); 
+                    ctx.moveTo(x+s*0.2, y+s*0.2); ctx.lineTo(x+s*0.8, y+s*0.8);
+                    ctx.moveTo(x+s*0.8, y+s*0.2); ctx.lineTo(x+s*0.2, y+s*0.8); ctx.stroke(); 
+                }
+            },
+            minimal: {
+                dark: (ctx, x, y, s, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x+s/2, y+s/2, s*0.35, 0, Math.PI*2); ctx.fill(); },
+                mid: (ctx, x, y, s, c) => { ctx.strokeStyle = c; ctx.lineWidth = Math.max(1, s*0.08); ctx.beginPath(); ctx.arc(x+s/2, y+s/2, s*0.3, 0, Math.PI*2); ctx.stroke(); },
+                light: (ctx, x, y, s, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x+s/2, y+s/2, s*0.08, 0, Math.PI*2); ctx.fill(); }
+            },
+            crosshatch: {
+                dark: (ctx, x, y, s, c) => { ctx.fillStyle = c; ctx.fillRect(x+s*0.15, y+s*0.15, s*0.7, s*0.7); },
+                mid: (ctx, x, y, s, c) => { ctx.strokeStyle = c; ctx.lineWidth = Math.max(1, s*0.1); ctx.beginPath(); ctx.moveTo(x+s*0.2, y+s*0.2); ctx.lineTo(x+s*0.8, y+s*0.8); ctx.stroke(); },
+                light: (ctx, x, y, s, c) => { ctx.strokeStyle = c; ctx.lineWidth = Math.max(1, s*0.1); ctx.beginPath(); ctx.moveTo(x+s*0.2, y+s*0.5); ctx.lineTo(x+s*0.8, y+s*0.5); ctx.stroke(); }
+            },
+            typewriter: {
+                dark: (ctx, x, y, s, c) => drawGlyph(ctx, "@", x, y, s, c),
+                mid: (ctx, x, y, s, c) => drawGlyph(ctx, "#", x, y, s, c),
+                light: (ctx, x, y, s, c) => drawGlyph(ctx, "*", x, y, s, c)
+            },
+            digital: {
+                dark: (ctx, x, y, s, c) => drawGlyph(ctx, "1", x, y, s, c),
+                mid: (ctx, x, y, s, c) => drawGlyph(ctx, "1", x, y, s, c),
+                light: (ctx, x, y, s, c) => drawGlyph(ctx, "0", x, y, s, c)
+            }
+        };
+
+        function drawGlyph(ctx, char, x, y, s, c) {
+            ctx.fillStyle = c;
+            ctx.font = `bold ${s*0.9}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(char, x + s/2, y + s/2);
+        };
+
+        function setSystem(name, el) {
+            currentSystem = name;
+            document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+            render();
+        }
+
+        function togglePlay() {
+            if (!originalImage) return;
+            isPlaying = !isPlaying;
+            updatePlayUI();
+            if (isPlaying) {
+                animationFrame = requestAnimationFrame(playSequence);
+            } else {
+                cancelAnimationFrame(animationFrame);
+            }
+        }
+
+        function updatePlayUI() {
+            if (isPlaying) {
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+            } else {
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+                forwardBtn.classList.remove('active-state');
+                backBtn.classList.remove('active-state');
+            }
+        }
+
+        function playSequence(timestamp) {
+            if (!isPlaying) return;
+
+            if (timestamp - lastFrameTime > frameInterval) {
+                let currentVal = parseInt(slider.value);
+                
+                // Active indicators
+                if (playDirection === 1) {
+                    forwardBtn.classList.add('active-state');
+                    backBtn.classList.remove('active-state');
+                } else {
+                    backBtn.classList.add('active-state');
+                    forwardBtn.classList.remove('active-state');
+                }
+
+                currentVal += (2 * playDirection);
+
+                // Handle Boundaries
+                if (currentVal >= 80) {
+                    if (isBoomerang) {
+                        currentVal = 80;
+                        playDirection = -1; 
+                    } else if (isLooping) {
+                        currentVal = 6;
+                    } else {
+                        currentVal = 80;
+                        togglePlay(); 
+                    }
+                } else if (currentVal <= 6) {
+                    if (isBoomerang) {
+                        currentVal = 6;
+                        playDirection = 1; 
+                    } else if (isLooping) {
+                        currentVal = 80;
+                    } else {
+                        currentVal = 6;
+                        togglePlay(); 
+                    }
+                }
+
+                slider.value = currentVal;
+                playBar.value = currentVal;
+                render();
+                lastFrameTime = timestamp;
+            }
+            animationFrame = requestAnimationFrame(playSequence);
+        }
+
+        function triggerInitialDecode() {
+            placeholder.classList.add('hidden');
+            canvas.classList.remove('hidden');
+            downloadBtn.disabled = false;
+            
+            // Start at sharp (6px) and move to blur (80px)
+            slider.value = 6;
+            playBar.value = 6;
+            playDirection = 1; 
+            
+            if(!isPlaying) togglePlay();
+        }
+
+        function handleImage(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                originalImage = new Image();
+                originalImage.onload = () => {
+                    triggerInitialDecode();
+                };
+                originalImage.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function render() {
+            if (!originalImage) return;
+            const size = parseInt(slider.value);
+            const isInverted = invertToggle.checked;
+            fidelityValue.innerText = size + 'px';
+
+            const maxDim = 1200; 
+            let w = originalImage.width;
+            let h = originalImage.height;
+            if (w > maxDim || h > maxDim) {
+                const ratio = Math.min(maxDim / w, maxDim / h);
+                w *= ratio; h *= ratio;
+            }
+
+            sourceCanvas.width = w; sourceCanvas.height = h;
+            sCtx.drawImage(originalImage, 0, 0, w, h);
+
+            canvas.width = w; canvas.height = h;
+            ctx.fillStyle = '#050505';
+            ctx.fillRect(0, 0, w, h);
+
+            const imgData = sCtx.getImageData(0, 0, w, h).data;
+            const system = systems[currentSystem];
+
+            for (let y = 0; y < h; y += size) {
+                for (let x = 0; x < w; x += size) {
+                    const px = Math.floor(x + size/2);
+                    const py = Math.floor(y + size/2);
+                    if (px < w && py < h) {
+                        const i = (py * w + px) * 4;
+                        const r = imgData[i], g = imgData[i+1], b = imgData[i+2], a = imgData[i+3];
+                        if (a > 50) {
+                            const color = `rgb(${r},${g},${b})`;
+                            let lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                            if (isInverted) lum = 1 - lum;
+                            if (lum < 0.33) system.dark(ctx, x, y, size, color);
+                            else if (lum < 0.66) system.mid(ctx, x, y, size, color);
+                            else system.light(ctx, x, y, size, color);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Event Listeners
+        imageLoader.addEventListener('change', handleImage);
+        
+        slider.addEventListener('input', () => {
+            playBar.value = slider.value;
+            render();
+        });
+        playBar.addEventListener('input', () => {
+            slider.value = playBar.value;
+            render();
+        });
+
+        invertToggle.addEventListener('change', render);
+        
+        playBtn.addEventListener('click', () => {
+            if (!isPlaying && slider.value <= 6 && !isLooping && !isBoomerang) {
+                playDirection = 1;
+            } else if (!isPlaying && slider.value >= 80 && !isLooping && !isBoomerang) {
+                playDirection = -1;
+            }
+            togglePlay();
+        });
+        
+        // Forward blurs (increases size toward 80)
+        forwardBtn.addEventListener('click', () => {
+            playDirection = 1; 
+            if(!isPlaying) togglePlay();
+        });
+
+        // Back sharpens (decreases size toward 6)
+        backBtn.addEventListener('click', () => {
+            playDirection = -1; 
+            if(!isPlaying) togglePlay();
+        });
+
+        loopBtn.addEventListener('click', () => {
+            isLooping = !isLooping;
+            isBoomerang = false; 
+            loopBtn.classList.toggle('active-state');
+            boomerangBtn.classList.remove('active-state');
+        });
+
+        boomerangBtn.addEventListener('click', () => {
+            isBoomerang = !isBoomerang;
+            isLooping = false; 
+            boomerangBtn.classList.toggle('active-state');
+            loopBtn.classList.remove('active-state');
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = `fidelity-lab-${currentSystem}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+    </script>
+</body>
+</html>
